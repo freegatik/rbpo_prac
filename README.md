@@ -1,6 +1,6 @@
 # РБПО — Windows-клиент (трей и служба)
 
-Учебный репозиторий с **ветками по заданиям**: от базового трей-приложения до связки со службой, локальным RPC (ALPC), HTTPS к REST API и антивирусным движком.
+Учебный репозиторий с **ветками по заданиям**: от базового трей-приложения до связки со службой, локальным RPC (ALPC), HTTPS к REST API, антивирусным движком и MSI-инсталлятором.
 
 Это **клиентская** часть стека. Сервер REST/JWT и лицензий — Java‑проект **`rbpo_backend`** (Spring Boot).
 
@@ -15,12 +15,13 @@
 
 | Ветка | Что внутри |
 | ----- | ----------- |
-| **main** | Актуальный код после слияния zad-1 … zad-4. |
+| **main** | Актуальный код после слияния zad-1 … zad-6. |
 | **zad-1** | `rbpo-app.exe`: трей, иконка, меню, single-instance, CMake, GitHub Actions. |
 | **zad-2** | `rbpo-app.exe` + `rbpo-service.exe`: запуск GUI в пользовательских сессиях, RPC остановки по `ncalrpc` (ALPC). |
 | **zad-3** | Добавлены RPC для auth/license, JWT в памяти службы, HTTPS к `rbpo_backend`, GUI входа и активации продукта. |
 | **zad-4** | Антивирусный движок, сканирование файлов / директорий, все необязательные требования (см. ниже). |
 | **zad-5** | Хранение AV-баз на диске, проверка ЭЦП манифеста и записей, резервное копирование, обновление по расписанию (см. ниже). |
+| **zad-6** | MSI-инсталлятор: установка exe и VC++ зависимостей, регистрация/удаление Windows-службы, сборка на CI. |
 
 ---
 
@@ -35,6 +36,8 @@
 | `src/rpc/rbpo_rpc.idl` | IDL-интерфейс (MIDL → `rpc_gen/`) |
 | `src/main.cpp` | GUI (трей-приложение) |
 | `src/rbpo_rpc_constants.h` | Имена службы, endpoint, коды ошибок |
+| `installer/Product.wxs` | Описание MSI-пакета (WiX) — файлы, служба, VC++ CRT (zad-6) |
+| `.github/workflows/build.yml` | CI-сборка exe и MSI-инсталлятора (zad-6) |
 
 Имя службы: **`RBPOService`**. RPC transport: `ncalrpc`, endpoint `RBPOServiceEndpoint`.
 
@@ -233,8 +236,29 @@ sc stop RBPOService
 sc delete RBPOService
 ```
 
+### Установка через MSI
+
+Собранный инсталлятор `RBPO-Setup.msi` (ветка `zad-6`) выполняет установку «из коробки»:
+
+- Копирует `rbpo-app.exe` и `rbpo-service.exe` в `C:\Program Files\RBPO`.
+- Устанавливает VC++ 2022 CRT через Merge Module (автоматический учёт ссылок Windows Installer).
+- Регистрирует и запускает службу `RBPOService` с типом запуска **Automatic**.
+
+При удалении через «Установку и удаление программ»:
+
+- Останавливает и удаляет службу `RBPOService`.
+- Удаляет все файлы приложения.
+- Удаляет VC++ CRT, если он не используется другими продуктами (reference counting MSM).
+
+Локальная сборка MSI (требуется WiX Toolset v3.11):
+
+```powershell
+.\installer\build.ps1 -SourceDir "build\Release" `
+    -VCRedistPath "C:\Program Files (x86)\Common Files\Merge Modules\Microsoft_VC143_CRT_x64.msm"
+```
+
 ---
 
 ## CI
 
-Workflow `.github/workflows/build.yml` собирает оба exe на `windows-latest` и публикует артефакты.
+Workflow `.github/workflows/build.yml` собирает оба exe на `windows-latest`, а для `x64` дополнительно собирает `RBPO-Setup.msi` и публикует его в артефакты.
